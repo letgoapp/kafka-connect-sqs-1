@@ -41,9 +41,9 @@
     <maven-surefire-plugin.version>2.22.1</maven-surefire-plugin.version>
     <maven-project-info-reports-plugin.version>3.0.0</maven-project-info-reports-plugin.version>
 
-    <aws-java-sdk.version>1.11.501</aws-java-sdk.version>
+    <aws-java-sdk.version>1.11.65</aws-java-sdk.version>
 
-    <kafka.connect-api.version>2.1.0</kafka.connect-api.version>
+    <kafka.connect-api.version>2.1.1</kafka.connect-api.version>
   </properties>
 
   <dependencyManagement>
@@ -52,6 +52,7 @@
         <groupId>org.apache.kafka</groupId>
         <artifactId>connect-api</artifactId>
         <version>${kafka.connect-api.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>junit</groupId>
@@ -73,6 +74,11 @@
         <groupId>com.amazonaws</groupId>
         <artifactId>aws-java-sdk-sts</artifactId>
         <version>${aws-java-sdk.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <version>1.2</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
