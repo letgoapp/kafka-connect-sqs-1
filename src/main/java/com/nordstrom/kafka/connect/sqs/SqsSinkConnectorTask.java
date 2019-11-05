@@ -1,12 +1,12 @@
 /*
  * Copyright 2019 Nordstrom, Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -20,6 +20,8 @@ import java.text.MessageFormat ;
 import java.util.Collection ;
 import java.util.Map ;
 
+import com.amazonaws.services.sqs.model.AmazonSQSException;
+import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.SinkRecord ;
 import org.apache.kafka.connect.sink.SinkTask ;
 import org.slf4j.Logger ;
@@ -32,10 +34,11 @@ public class SqsSinkConnectorTask extends SinkTask {
 
   private SqsClient client ;
   private SqsSinkConnectorConfig config ;
+  private int remainingRetries;
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.connector.Task#version()
    */
   @Override
@@ -45,7 +48,7 @@ public class SqsSinkConnectorTask extends SinkTask {
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.sink.SinkTask#start(java.util.Map)
    */
   @Override
@@ -55,13 +58,14 @@ public class SqsSinkConnectorTask extends SinkTask {
 
     config = new SqsSinkConnectorConfig( props ) ;
     client = new SqsClient(config.originalsWithPrefix(SqsConnectorConfigKeys.CREDENTIALS_PROVIDER_CONFIG_PREFIX.getValue())) ;
+    remainingRetries = config.getMaxRetries();
 
-    log.info( "task.start:OK, sqs.queue.url={}, topics={}", config.getQueueUrl(), config.getTopics() ) ;
+    log.info( "task.start:OK, sqs.queue.url={}, topics={}, maxRetries={}", config.getQueueUrl(), config.getTopics(), config.getMaxRetries() ) ;
   }
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.sink.SinkTask#put(java.util.Collection)
    */
   @Override
@@ -89,19 +93,28 @@ public class SqsSinkConnectorTask extends SinkTask {
           log.debug( ".put.OK:message-id={}, queue.url={}, sqs-group-id={}, sqs-message-id={}", gid, mid,
               config.getQueueUrl(), sid ) ;
         } catch ( final RuntimeException e ) {
-          log.error( "An Exception occurred while sending message {} to target url {}:", mid, config.getQueueUrl(),
-              e ) ;
+          if (remainingRetries > 0) {
+            log.warn("Sending message failed, remaining retries: {} (reason: {}),", remainingRetries, e.getMessage());
+            remainingRetries--;
+            throw new RetriableException(e);
+          } else {
+            log.error("An Exception occurred while sending message {} to target url {} after {} retries:",
+                    mid, config.getQueueUrl(), config.getMaxRetries(), e);
+            throw e;
+          }
         }
       } else {
         log.warn( "Skipping empty message: key={}", key ) ;
       }
 
     }
+
+    remainingRetries = config.getMaxRetries();
   }
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.sink.SinkTask#stop()
    */
   @Override
@@ -112,7 +125,7 @@ public class SqsSinkConnectorTask extends SinkTask {
   /**
    * Test that we have both the task configuration and SQS client properly
    * initialized.
-   * 
+   *
    * @return true if task is in a valid state.
    */
   private boolean isValidState() {
