@@ -30,9 +30,11 @@ import org.slf4j.LoggerFactory;
 public class SqsSinkConnectorConfig extends AbstractConfig {
 //  private final Logger log = LoggerFactory.getLogger(this.getClass());
   private static final Logger log = LoggerFactory.getLogger(SqsSinkConnectorConfig.class);
+  private static final int MAX_RETRIES_DEFAULT = 3;
 
   private final String queueUrl;
   private final String topics;
+  private final int maxRetries;
 
   private static final ConfigDef CONFIG_DEF = new ConfigDef()
       .define(SqsConnectorConfigKeys.SQS_QUEUE_URL.getValue(), Type.STRING, Importance.HIGH, "URL of the SQS queue to be written to.")
@@ -47,7 +49,8 @@ public class SqsSinkConnectorConfig extends AbstractConfig {
           ConfigDef.Width.LONG,
           "AWS Credentials Provider Class"
       )
-      ;
+      .define(SqsConnectorConfigKeys.MAX_RETRIES.getValue(), Type.INT, MAX_RETRIES_DEFAULT, Importance.HIGH,
+              "Maximum number of retries when some error occurs with SQS");
 
   public static ConfigDef config() {
     return CONFIG_DEF;
@@ -57,6 +60,7 @@ public class SqsSinkConnectorConfig extends AbstractConfig {
     super(config(), originals);
     queueUrl = getString(SqsConnectorConfigKeys.SQS_QUEUE_URL.getValue());
     topics = getString(SqsConnectorConfigKeys.TOPICS.getValue());
+    maxRetries = getInt(SqsConnectorConfigKeys.MAX_RETRIES.getValue());
   }
 
   public String getQueueUrl() {
@@ -67,6 +71,9 @@ public class SqsSinkConnectorConfig extends AbstractConfig {
     return topics;
   }
 
+  public int getMaxRetries() {
+    return maxRetries;
+  }
 
 
   private static class CredentialsProviderValidator implements ConfigDef.Validator {
