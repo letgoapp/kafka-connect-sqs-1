@@ -1,12 +1,12 @@
 /*
  * Copyright 2019 Nordstrom, Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -23,6 +23,7 @@ import java.util.Map ;
 import java.util.stream.Collectors ;
 
 import org.apache.kafka.connect.data.Schema ;
+import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord ;
 import org.apache.kafka.connect.source.SourceTask ;
 import org.slf4j.Logger ;
@@ -36,10 +37,11 @@ public class SqsSourceConnectorTask extends SourceTask {
 
   private SqsClient client ;
   private SqsSourceConnectorConfig config ;
+  private int remainingRetries;
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.connector.Task#version()
    */
   @Override
@@ -49,7 +51,7 @@ public class SqsSourceConnectorTask extends SourceTask {
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.source.SourceTask#start(java.util.Map)
    */
   @Override
@@ -59,13 +61,14 @@ public class SqsSourceConnectorTask extends SourceTask {
 
     config = new SqsSourceConnectorConfig( props ) ;
     client = new SqsClient(config.originalsWithPrefix(SqsConnectorConfigKeys.CREDENTIALS_PROVIDER_CONFIG_PREFIX.getValue())) ;
+    remainingRetries = config.getMaxRetries();
 
     log.info( "task.start.OK, sqs.queue.url={}, topics={}", config.getQueueUrl(), config.getTopics() ) ;
   }
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.source.SourceTask#poll()
    */
   @Override
@@ -76,12 +79,27 @@ public class SqsSourceConnectorTask extends SourceTask {
       throw new IllegalStateException( "Task is not properly initialized" ) ;
     }
 
-    // Read messages from the queue.
-    List<Message> messages = client.receive( config.getQueueUrl(), config.getMaxMessages(),
-        config.getWaitTimeSeconds() ) ;
-    log.debug( ".poll:url={}, max={}, wait={}, size={}", config.getQueueUrl(), config.getMaxMessages(),
-        config.getWaitTimeSeconds(), messages.size() ) ;
+    List<Message> messages;
 
+    try {
+      // Read messages from the queue.
+      messages = client.receive(config.getQueueUrl(), config.getMaxMessages(),
+              config.getWaitTimeSeconds());
+      log.debug(".poll:url={}, max={}, wait={}, size={}", config.getQueueUrl(), config.getMaxMessages(),
+              config.getWaitTimeSeconds(), messages.size());
+    } catch ( final RuntimeException e ) {
+      if (remainingRetries > 0) {
+        log.warn("Receiving messages failed, remaining retries: {} (reason: {}),", remainingRetries, e.getMessage());
+        remainingRetries--;
+        throw new RetriableException(e);
+      } else {
+        log.error("An Exception occurred while receiving messages from url {} with timeout {} after {} retries:",
+                config.getQueueUrl(), config.getWaitTimeSeconds(), config.getMaxRetries(), e);
+        throw e;
+      }
+    }
+
+    remainingRetries = config.getMaxRetries();
     // Create a SourceRecord for each message in the queue.
     return messages.stream().map( message -> {
 
@@ -118,7 +136,7 @@ public class SqsSourceConnectorTask extends SourceTask {
 
   /*
    * (non-Javadoc)
-   * 
+   *
    * @see org.apache.kafka.connect.source.SourceTask#stop()
    */
   @Override
@@ -129,7 +147,7 @@ public class SqsSourceConnectorTask extends SourceTask {
   /**
    * Test that we have both the task configuration and SQS client properly
    * initialized.
-   * 
+   *
    * @return true if task is in a valid state.
    */
   private boolean isValidState() {
