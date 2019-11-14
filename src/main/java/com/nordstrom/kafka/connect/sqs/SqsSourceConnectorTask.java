@@ -23,7 +23,6 @@ import java.util.Map ;
 import java.util.stream.Collectors ;
 
 import org.apache.kafka.connect.data.Schema ;
-import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord ;
 import org.apache.kafka.connect.source.SourceTask ;
 import org.slf4j.Logger ;
@@ -89,9 +88,10 @@ public class SqsSourceConnectorTask extends SourceTask {
               config.getWaitTimeSeconds(), messages.size());
     } catch ( final RuntimeException e ) {
       if (remainingRetries > 0) {
-        log.warn("Receiving messages failed, remaining retries: {} (reason: {}),", remainingRetries, e.getMessage());
+        log.warn("Receiving messages failed from url {}, remaining retries: {} (reason: {}),",
+                config.getQueueUrl(), remainingRetries, e.getMessage());
         remainingRetries--;
-        throw new RetriableException(e);
+        throw new SqsRetriableException(e);
       } else {
         log.error("An Exception occurred while receiving messages from url {} with timeout {} after {} retries:",
                 config.getQueueUrl(), config.getWaitTimeSeconds(), config.getMaxRetries(), e);
