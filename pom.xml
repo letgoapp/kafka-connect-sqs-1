@@ -302,4 +302,11 @@
     <url>https://www.nordstrom.com</url>
   </organization>
 
+  <distributionManagement>
+    <repository>
+      <id>artifactory</id>
+      <name>artifactory-releases</name>
+      <url>https://artifactory.letgo-bi.cloud/artifactory/spark-release-local</url>
+    </repository>
+  </distributionManagement>
 </project>
