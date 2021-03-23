@@ -188,8 +188,6 @@
                     <exclude>org.slf4j:*</exclude>
                   </excludes>
                 </artifactSet>
-                <finalName>${project.artifactId}-${project.version}-original</finalName>
-                <outputDirectory>target</outputDirectory>
               </configuration>
             </execution>
           </executions>
